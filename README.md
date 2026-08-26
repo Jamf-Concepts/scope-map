@@ -1,13 +1,13 @@
 # ScopeMap
 
-ScopeMap is a native macOS app that visualizes how policies, configuration profiles, apps, and groups connect inside a Jamf Pro environment. It draws the relationships Jamf Pro's web interface can't show you on one screen: which objects deploy to which devices, why a device received (or didn't receive) something, and where the cruft is hiding.
+ScopeMap is a native macOS app that answers the question Jamf Pro's web interface can't: what actually reaches a device, and why. It scans a Jamf Pro environment, models every object that participates in scoping — computers and mobile devices, groups, policies, profiles, apps, packages, scripts, users, and more — and evaluates effective scope across all of them so you can see blast radius, trace a single device's delivery path, and find the cruft that's accumulated.
 
 ![The Map tab — an interactive graph of a Jamf Pro environment, showing smart groups, policies, and configuration profiles connected to the devices they target](docs/images/01-map.png)
 
 - [Features](#features)
-- [Editions](#editions)
 - [Installing](#installing)
 - [Requirements](#requirements)
+- [Connecting to a server](#connecting-to-a-server)
 - [Jamf Pro API privileges](#jamf-pro-api-privileges)
 - [What ScopeMap can and can't evaluate](#what-scopemap-can-and-cant-evaluate)
 - [Deleting objects (Destructive Mode)](#deleting-objects-destructive-mode)
@@ -20,70 +20,145 @@ ScopeMap is a native macOS app that visualizes how policies, configuration profi
 
 ## Features
 
+Seven tabs, in the order they usually get used. Tab order is customizable in Preferences.
+
 ### Visualize
 
-- **Map** — an interactive graph of computers or mobile devices and everything scoped to them: smart and static groups, policies, configuration profiles, Mac and mobile apps, App Installers, Restricted Software, Patch Titles, packages, scripts, printers, PreStage enrollments, Enrollment Customizations, extension attributes, Blueprints, and your buildings, departments, and categories.
+- **Map** — an interactive graph with separate Computers and Devices views, covering smart and static groups, policies, configuration profiles, Mac and mobile apps, App Catalog deployments, Restricted Software, Patch Titles, packages, scripts, printers, PreStage enrollments, Enrollment Customizations, extension attributes, Blueprints *(beta)*, Jamf users and user groups, and your buildings, departments, and categories.
 - **Journey** — the full path a device takes from enrollment (PreStage) through group membership to every policy, profile, app, package, and script it would receive — including cascades, where installed software triggers smart-group membership that delivers more software.
-- **Compare** — side-by-side comparison of two devices, policies, profiles, packages, or scripts, including effective-scope evaluation ("applies / does not apply / unknown").
+- **Compare** — opens in its own window for side-by-side comparison of two devices, policies, profiles, packages, or scripts, including effective-scope evaluation ("applies / does not apply / unknown").
 - **Inspector** — select any object to see its scope, its relationships in both directions, and a direct link to open it in Jamf Pro.
 
 ![The Journey tab — the path a device takes from PreStage enrollment through group membership to everything it receives](docs/images/02-journey.png)
 
 ### Investigate
 
-- **Search** — full-text search across loaded configuration profile payload settings, so you can find which profile actually sets a given key.
-- **Summary** — import a Jamf Pro Summary file (text or JSON) to review licensing, database health, and server configuration.
-- **Compliance** — view Jamf Compliance Benchmark results pulled from the Jamf Platform API, including per-benchmark pass rates. Read-only.
-- **Filters** — narrow the map by name, object type, site, staleness, scope status, managed state, group emptiness, policy enabled state, and saved advanced searches.
-- **Flags and notes** — flag any object and attach a note as you work, then include the flagged set in an export.
+- **Search** — full-text search across configuration profile payload settings, so you can find which profile actually sets a given key. Requires a deep scan (see [Scans and snapshots](#scans-and-snapshots)) for complete results, since payload contents are only fetched then.
+- **Summary** — import a Jamf Pro Summary file (text or JSON) to review licensing, database health, server configuration, and account hygiene.
+- **Compliance** — Jamf Compliance Benchmark results pulled from the Jamf Platform API, with per-benchmark pass rates and drill-down to individual rules, annotated with macOS Security Compliance Project rule names. Read-only.
+- **Filters** — narrow the map by name, object type, site, staleness, scope status, managed state, group emptiness, policy enabled state, Blueprint deployment state, Lost Mode, device compliance, user assignment, Inventory Preload, and saved advanced searches. Benchmark-generated objects and legacy Jamf Remote policies can be hidden outright.
+- **Flags and notes** — flag any object and attach a note as you work. A toolbar badge counts flagged items, a dedicated view lists them, and the flagged set can be included in an export.
+
+### Catch what's easy to miss
+
+ScopeMap marks objects on the canvas and in the Inspector when something looks wrong:
+
+- **Policies that can never fire** — a login or startup trigger whose check-in configuration means the event never reaches the policy.
+- **Scope you can't confirm** — objects whose targeting depends on limitations ScopeMap can't evaluate, marked rather than guessed at.
+- **Unscoped objects** — enabled and deployable, but targeting nothing.
+- **Complex groups** — smart groups nested five or more levels deep through Member-of criteria, or carrying ten or more criteria.
+- **App license pressure** — VPP apps low on or out of available licenses.
+- **FileVault** — devices whose escrowed recovery key is invalid or in an unknown state.
+- **Patch Titles** — configurations whose extension attributes haven't been accepted.
+- **Inventory Preload** — devices whose building, department, or user assignment came from a preload record rather than from the device itself, which changes what their scope actually means.
+- **Device compliance** — compliant / non-compliant dots, derived from the two smart groups you identify as your Device Compliance groups (see [Device Compliance](#device-compliance)).
+- **Lost Mode** — mobile devices currently in Lost Mode.
 
 ### Clean up
 
-- **Cleanup** — surfaces orphaned packages and scripts, unscoped enabled policies, empty static groups, disabled policies, and other environment cruft, with exportable findings. An optional, off-by-default **Destructive Mode** can delete surfaced objects directly (see [Deleting objects](#deleting-objects-destructive-mode)).
-- **Risk warnings** — flags configurations that are easy to miss, including login/startup-triggered policies whose check-in setting means the trigger can never fire, deeply nested smart-group chains, and objects affected by Inventory Preload.
-- **Health Check** *(internal edition)* — a printable report of stale devices, unscoped objects, unused buildings and departments, and more.
+- **Cleanup** — surfaces orphaned packages and scripts, unscoped enabled policies, empty static groups, disabled policies, unused buildings, departments, categories, printers, and enrollment customizations, and other environment cruft, with exportable findings. An optional, off-by-default **Destructive Mode** can delete surfaced objects directly (see [Deleting objects](#deleting-objects-destructive-mode)).
 
 ![The Cleanup tab — orphaned packages, unscoped policies, and empty static groups surfaced for review](docs/images/03-cleanup.png)
 
 ### Work with the results
 
-- **Export** — CSV, JSON, Markdown, HTML, and PNG output for the current view, a selected object, or a full environment report.
-- **Cached snapshots** — reopen the last scan of a server instantly without re-querying the API, so you can keep working offline.
+- **Export** — CSV, JSON, Markdown, HTML, and PNG, depending on the report. Node inventories and relationship maps export as CSV/JSON/Markdown, canvas snapshots as PNG. Cleanup, Compare, Compliance, Journey, and Summary each have their own export sheet, with Compliance defaulting to a printable HTML report.
 - **Activity log** — every API call, timing, and error in one window, with a toolbar badge when something fails during a scan.
 
-## Editions
+### Scans and snapshots
 
-ScopeMap builds in two editions, and **two features differ between them**:
+A standard scan fetches the objects and relationships needed to draw the map. A **deep scan** goes further and pulls the detail records behind them — configuration profile payload contents, policy payloads, and the rest — which is what Search needs and what makes some risk warnings possible.
 
-| | Internal | External |
-|---|---|---|
-| Health Check report | Yes | — |
-| Destructive Mode (delete) | — | Yes |
+Every scan is cached per server, so reopening a server loads the last snapshot instantly, with no API traffic, and works offline. The snapshot records when its data was actually fetched, not when it was last written, so a stale cache says so.
 
-Everything else is identical. The internal edition shows a red banner in the title bar; the external edition doesn't. Help → About reports which one you're running.
+### Device Compliance
+
+Jamf exposes no API for which smart groups are configured under Settings → Global → Device Compliance, so ScopeMap asks you to identify them: an "applicable" group and a "compliant" group, per platform, per server. Everything derived from them — the node dots, the compliance filter — reflects *your* assertion about that configuration, not something Jamf reported. This is separate from the Compliance tab, which reads benchmark results from the Platform API.
 
 ## Installing
 
 Download the latest notarized installer package from the [Releases](../../releases) page and run it. The app is signed and notarized by Apple, so it opens normally — no Gatekeeper warnings and no right-click workaround needed.
 
-To build from source instead, clone the repository and open `ScopeMap.xcodeproj` in Xcode 16 or later. The scheme builds the external edition by default; the `*-Internal` build configurations produce the internal edition.
+To build from source instead, clone the repository and open `ScopeMap.xcodeproj`. There is one scheme and one set of Debug/Release configurations.
+
+A short guided tour runs the first time you launch the app, and Help → Help opens an in-app reference covering how scanning works, credentials, and privacy.
 
 ## Requirements
 
 - **macOS 14.0 or later** (Apple silicon or Intel)
 - **Jamf Pro** with API access (Classic + Pro API)
 - **Jamf Platform API credentials** — only for Blueprints and the Compliance tab. Everything else works without them.
-- **Xcode 16 or later** — only to build from source
+- **Xcode 26 or later** — only to build from source
+
+## Connecting to a server
+
+ScopeMap manages a list of saved Jamf Pro servers, so you can keep sandbox, staging, and production side by side and switch between them without re-entering anything. Each server keeps its own cached snapshot, its own Device Compliance group selections, and its own credentials in the Keychain.
+
+Both auth modes are supported: a Jamf Pro user account (username/password) or an API client (client ID/secret).
 
 ## Jamf Pro API privileges
 
-By default ScopeMap is a **read-only reporting tool** — it never creates, modifies, or deletes anything on your server. Create a dedicated API role with **Read** privileges on the objects you want visualized:
+By default ScopeMap is a **read-only reporting tool** — it never creates, modifies, or deletes anything on your server. Every request it makes is a `GET`.
 
-Computers, Mobile Devices, Smart/Static Computer Groups, Smart/Static Mobile Device Groups, Policies, macOS Configuration Profiles, Mobile Device Configuration Profiles, Mac Applications, Mobile Device Applications, App Installers, Restricted Software, Patch Management, Packages, Scripts, Printers, Computer PreStage Enrollments, Mobile Device PreStage Enrollments, Enrollment Customizations, Buildings, Departments, Categories, Computer Extension Attributes, Mobile Device Extension Attributes, Jamf Pro User Accounts & Groups.
+Privilege names differ depending on how you authenticate, so both lists are below. If a privilege is missing, ScopeMap doesn't fail — that object type is simply absent from the map — so you can trim either list for a narrower use case.
 
-A Jamf Pro user with the **Auditor** role covers all of the above.
+### If you use an API client (client ID/secret)
 
-Both auth modes are supported: a Jamf Pro user account (username/password) or an API client (client ID/secret).
+Create a dedicated API role with these **Read** privileges:
+
+<details>
+<summary>37 read privileges</summary>
+
+**Devices** — Read Computers · Read Mobile Devices
+
+**Groups** — Read Smart Computer Groups · Read Static Computer Groups · Read Smart Mobile Device Groups · Read Static Mobile Device Groups · Read Smart User Groups · Read Static User Groups
+
+**Deliverables** — Read Policies · Read macOS Configuration Profiles · Read iOS Configuration Profiles · Read Mac Applications · Read Mobile Device Applications · Read Restricted Software · Read Packages · Read Scripts · Read Printers
+
+**Patch** — Read Patch Management Software Titles · Read Patch Policies
+
+**Enrollment** — Read Computer PreStage Enrollments · Read Mobile Device PreStage Enrollments · Read Enrollment Customizations · Read Device Enrollment Program Instances
+
+**Extension attributes** — Read Computer Extension Attributes · Read Mobile Device Extension Attributes
+
+**Advanced searches** — Read Advanced Computer Searches · Read Advanced Mobile Device Searches
+
+**Organization** — Read Buildings · Read Departments · Read Categories · Read Self Service · Read Sites · Read Distribution Points
+
+**Accounts** — Read Accounts · Read Account Groups · Read User
+
+**Settings** — Read Computer Check-In · Read Inventory Preload Records
+
+</details>
+
+Two of those are easy to miss. **Read Self Service** is required alongside Read Categories, because Jamf gates the categories endpoint on both — ScopeMap doesn't read Self Service itself. And the patch endpoints need **both** Read Patch Management Software Titles and Read Patch Policies; either alone fails.
+
+App Catalog deployments are the one gap. The App Installers endpoint isn't covered by either of Jamf's published privilege tables and has no matching API role privilege, so if App Catalog deployments don't appear on your map, that endpoint is the thing to check.
+
+Blueprints and Compliance are Jamf Platform features and use separate Platform scopes rather than Jamf Pro privileges: `blueprints read` and `compliance-benchmarks read`.
+
+### If you use a Jamf Pro user account (username/password)
+
+The **Auditor** role covers the object privileges. Confirm these four settings-level privileges on your server, since they sit outside what Auditor is built around: Read Computer Check-In, Read Inventory Preload Records, Read Device Enrollment Program Instances, and Read Sites.
+
+Eight privileges are named differently on a user account than in an API role, which is worth knowing if you're translating between the two:
+
+| Object | User account | API role |
+| --- | --- | --- |
+| Jamf Pro accounts and groups | Read - User accounts and groups | Read Accounts **and** Read Account Groups |
+| Computer extension attributes | Read - Extension Attributes | Read Computer Extension Attributes |
+| Mac apps | Read - Mac App Store Apps | Read Mac Applications |
+| Mobile device apps | Read - Mobile Device Apps | Read Mobile Device Applications |
+| Distribution points | Read - File Share Distribution Points | Read Distribution Points |
+| Restricted software | Read - Restricted Software Records | Read Restricted Software |
+| Jamf Pro users | Read - Users | Read User |
+| Mobile device profiles | Read - Mobile Device Configuration Profiles | Read iOS Configuration Profiles |
+
+### Privileges ScopeMap never needs
+
+No **Create**, **Update**, or **Send** privileges, ever. ScopeMap issues no MDM commands, no pushes, and no log flushes.
+
+No key-viewing privileges either. FileVault escrow status comes from the computer inventory record, so **View Disk Encryption Recovery Key** and **View Local Admin Password** are not required.
 
 The one exception to read-only is the optional Destructive Mode described below. It is disabled by default and its delete controls stay hidden unless you turn it on. If you don't enable it, no delete privileges are needed and ScopeMap only ever issues read requests.
 
@@ -95,11 +170,11 @@ Scope evaluation is the core of the app, so it's worth being precise about where
 
 **Detected but not evaluated** — limitations (LDAP users and groups, network segments, iBeacons) and Jamf user-group targets. These depend on network, directory, or sign-in state at check-in time, which no amount of inventory data can reconstruct. Objects using them are never reported as unscoped, and Compare reports them as "unknown" rather than guessing.
 
+**Inferred, not confirmed** — cascades in Journey, where a package installed by one policy makes a device eligible for a smart group that delivers more software. ScopeMap can show that a cascade is possible from criteria and package names; it can't always confirm one occurred, and labels its confidence accordingly.
+
 **Not yet covered as object types** — eBooks and Classes.
 
 ## Deleting objects (Destructive Mode)
-
-*External edition only.*
 
 Cleanup surfaces environment cruft — orphaned packages and scripts, empty static groups, unscoped or disabled objects. To act on those findings from within ScopeMap, you can enable **Destructive Mode**, which deletes surfaced objects through the Jamf Pro API.
 
@@ -112,7 +187,30 @@ Destructive Mode is built to be hard to trigger by accident:
 
 Deletion is supported for scripts, packages, policies, macOS and mobile configuration profiles, restricted software, static computer and mobile groups, buildings, departments, printers, and Mac and mobile apps. **Computers and mobile devices are never deletable** — removing their records carries MDM consequences — and App Catalog deployments must be removed in Jamf Pro directly.
 
-Destructive Mode needs **Delete** privileges on the object types you intend to remove, in addition to the Read privileges above. The Auditor role does not include them. If your account has only Read access, deletes fail with a permissions error and nothing is changed.
+Destructive Mode needs **Delete** privileges on the object types you intend to remove, in addition to the Read privileges above. The Auditor role includes none of them. If your account has only Read access, deletes fail with a permissions error and nothing is changed.
+
+<details>
+<summary>13 delete privileges</summary>
+
+| Object | API role | User account |
+| --- | --- | --- |
+| Scripts | Delete Scripts | Delete - Scripts |
+| Packages | Delete Packages | Delete - Packages |
+| Policies | Delete Policies | Delete - Policies |
+| macOS configuration profiles | Delete macOS Configuration Profiles | Delete - macOS Configuration Profiles |
+| Mobile device configuration profiles | Delete iOS Configuration Profiles | Delete - Mobile Device Configuration Profiles |
+| Restricted software | Delete Restricted Software | Delete - Restricted Software Records |
+| Static computer groups | Delete Static Computer Groups | Delete - Static Computer Groups |
+| Static mobile device groups | Delete Static Mobile Device Groups | Delete - Static Mobile Device Groups |
+| Buildings | Delete Buildings | Delete - Buildings |
+| Departments | Delete Departments | Delete - Departments |
+| Printers | Delete Printers | Delete - Printers |
+| Mac apps | Delete Mac Applications | Delete - Mac App Store Apps |
+| Mobile device apps | Delete Mobile Device Applications | Delete - Mobile Device Apps |
+
+</details>
+
+Grant only the object types you actually intend to clean up. Note that the **smart** group delete privileges are never needed — only empty static groups are deletable — and neither are Delete Computers, Delete Mobile Devices, or Delete User.
 
 ## Privacy and security
 
@@ -120,8 +218,9 @@ Destructive Mode needs **Delete** privileges on the object types you intend to r
 - Cached server snapshots are stored locally in the app's sandboxed container.
 - The app is sandboxed with outgoing-network and user-selected-file entitlements only.
 - **Minimal, anonymous usage analytics.** ScopeMap sends a single anonymous "launched" signal to [TelemetryDeck](https://telemetrydeck.com) at startup, so the Concepts team can see adoption. No device, server, credentials, or Jamf object data is ever included. Opt out anytime in Preferences → General → Privacy (takes effect on next launch).
+- **Version check.** At launch ScopeMap fetches a small JSON file from a public GitHub repository listing versions that shouldn't be run — how we stop a build with a serious defect from staying in circulation. The request is an anonymous `GET`; it sends no identifying information and no data about you, your Mac, or your server. If the request fails, the app starts normally.
 
-The other time ScopeMap sends anything anywhere else is when *you* file a bug report, described next. Nothing beyond the launch signal above is transmitted automatically, and nothing else leaves without you reading it first.
+Besides those two startup requests, ScopeMap talks only to the Jamf Pro server you point it at — and to us, when *you* file a bug report. Nothing else is transmitted automatically, and nothing leaves without you reading it first.
 
 See [SECURITY.md](SECURITY.md) to report a vulnerability. Do not use a public issue for security reports.
 
@@ -135,15 +234,25 @@ ScopeMap doesn't write a log file to disk. Every API call, its timing, and any e
 
 - **"Certificate not trusted" or TLS errors connecting to a Jamf Pro server** — this usually means the server uses a self-signed or internally-issued certificate that isn't in your Mac's trust store. Add the certificate to your login or System keychain and mark it trusted, then reconnect.
 - **403 / permission errors during a scan** — the API account or role you're using is missing a Read privilege for one of the object types listed in [Jamf Pro API privileges](#jamf-pro-api-privileges). Check the Activity log for the specific endpoint that failed and add the corresponding privilege.
+- **Search finds nothing in profile payloads** — payload contents are only fetched during a deep scan. Run one, then search again.
+- **The Compliance tab or Blueprints are empty** — both require Jamf Platform API credentials for the connected server. Everything else works without them.
 - **Destructive Mode delete fails with a permissions error** — your account has Read access but not the Delete privilege for that object type. See [Deleting objects](#deleting-objects-destructive-mode).
 - **A scan hangs or never completes** — open the Activity log (toolbar) to see which API call is in progress and whether it's retrying. Very large environments can take longer on the first scan; subsequent scans use the cached snapshot.
+- **The data looks out of date** — check the snapshot timestamp. Cached snapshots are shown as-is until you rescan.
 - **Still stuck** — use Help → Report a Bug so the report includes your app/macOS version, object counts, and the tail of the activity log.
 
-## Sending feedback
+## Reporting a bug
 
 Use **Help → Report a Bug** in the app, or the bug icon in the toolbar. It gathers the context that makes a report actionable — app and macOS version, object counts, active filters, and the tail of the activity log — and lets you attach screenshots.
 
 Your **server URL, hostname, server name, and API account are redacted** from the report before it's sent. Jamf object names (policies, groups, packages) are kept, because they're usually what the bug is about. The full text is shown to you for review before anything is sent, and there's a Copy Report button if you'd rather send it yourself. Attached screenshots can't be redacted — check them for your server URL before adding one.
+
+## Getting help
+
+- **In the app** — Help → Help covers how scanning works, what credentials are needed, and what the app does and doesn't send anywhere.
+- **Something wrong?** — [Report a bug](#reporting-a-bug).
+- **A security issue?** — [SECURITY.md](SECURITY.md), not a public issue.
+- **Want to contribute?** — [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
