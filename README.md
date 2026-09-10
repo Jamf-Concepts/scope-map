@@ -24,10 +24,10 @@ Seven tabs, in the order they usually get used. Tab order is customizable in Pre
 
 ### Visualize
 
-- **Map** — an interactive graph with separate Computers and Devices views, covering smart and static groups, policies, configuration profiles, Mac and mobile apps, App Catalog deployments, Restricted Software, Patch Titles, packages, scripts, printers, PreStage enrollments, Enrollment Customizations, extension attributes, Blueprints *(beta)*, Jamf users and user groups, and your buildings, departments, and categories.
+- **Map** — an interactive graph with separate Computers and Devices views, covering smart and static groups, policies, configuration profiles, Mac and mobile apps, App Catalog deployments, Restricted Software, Patch Titles, packages, scripts, printers, PreStage enrollments, Enrollment Customizations, extension attributes, Blueprints *(beta)*, webhooks, Jamf users and user groups, and your buildings, departments, and categories.
 - **Journey** — the full path a device takes from enrollment (PreStage) through group membership to every policy, profile, app, package, and script it would receive — including cascades, where installed software triggers smart-group membership that delivers more software.
-- **Compare** — opens in its own window for side-by-side comparison of two devices, policies, profiles, packages, or scripts, including effective-scope evaluation ("applies / does not apply / unknown").
-- **Inspector** — select any object to see its scope, its relationships in both directions, and a direct link to open it in Jamf Pro.
+- **Compare** — opens in its own window for side-by-side comparison of two computers, mobile devices, policies, macOS or mobile configuration profiles, or Blueprints, including effective-scope evaluation ("applies / does not apply / unknown").
+- **Inspector** — select any object to see its scope, its relationships in both directions, and a direct link to open it in Jamf Pro. Blueprints additionally report per-device deployment status: Jamf's own succeeded / failed / pending counts, each expandable to the named devices behind it.
 
 ![The Journey tab — the path a device takes from PreStage enrollment through group membership to everything it receives](docs/images/02-journey.png)
 
@@ -35,7 +35,7 @@ Seven tabs, in the order they usually get used. Tab order is customizable in Pre
 
 - **Search** — full-text search across configuration profile payload settings, so you can find which profile actually sets a given key. Requires a deep scan (see [Scans and snapshots](#scans-and-snapshots)) for complete results, since payload contents are only fetched then.
 - **Summary** — import a Jamf Pro Summary file (text or JSON) to review licensing, database health, server configuration, and account hygiene.
-- **Compliance** — Jamf Compliance Benchmark results pulled from the Jamf Platform API, with per-benchmark pass rates and drill-down to individual rules, annotated with macOS Security Compliance Project rule names. Read-only.
+- **Compliance** — Jamf Compliance Benchmark results pulled from the Jamf Platform API, with per-benchmark pass rates and drill-down to individual rules. Read-only.
 - **Filters** — narrow the map by name, object type, site, staleness, scope status, managed state, group emptiness, policy enabled state, Blueprint deployment state, Lost Mode, device compliance, user assignment, Inventory Preload, and saved advanced searches. Benchmark-generated objects and legacy Jamf Remote policies can be hidden outright.
 - **Flags and notes** — flag any object and attach a note as you work. A toolbar badge counts flagged items, a dedicated view lists them, and the flagged set can be included in an export.
 
@@ -46,17 +46,20 @@ ScopeMap marks objects on the canvas and in the Inspector when something looks w
 - **Policies that can never fire** — a login or startup trigger whose check-in configuration means the event never reaches the policy.
 - **Scope you can't confirm** — objects whose targeting depends on limitations ScopeMap can't evaluate, marked rather than guessed at.
 - **Unscoped objects** — enabled and deployable, but targeting nothing.
-- **Complex groups** — smart groups nested five or more levels deep through Member-of criteria, or carrying ten or more criteria.
+- **Complex groups** — smart groups carrying ten or more criteria, or five or more "Member of" criteria that point at other smart groups.
 - **App license pressure** — VPP apps low on or out of available licenses.
 - **FileVault** — devices whose escrowed recovery key is invalid or in an unknown state.
+- **Profiles a PreStage won't keep** — a PreStage installs a configuration profile during enrollment regardless of that profile's own scope, but Jamf only *keeps* it on a device while the scope covers that device. If it doesn't, the profile silently falls off days later with nothing in Jamf Pro to say so. The Inspector names the computers affected so you can trace one in Journey, and states how many of the PreStage's enrolled computers the finding was measured against — devices too newly enrolled to have been evaluated by a smart group are deliberately excluded rather than counted as misses.
+- **PreStages with packages but no distribution point** — the packages will silently not deploy.
 - **Patch Titles** — configurations whose extension attributes haven't been accepted.
 - **Inventory Preload** — devices whose building, department, or user assignment came from a preload record rather than from the device itself, which changes what their scope actually means.
 - **Device compliance** — compliant / non-compliant dots, derived from the two smart groups you identify as your Device Compliance groups (see [Device Compliance](#device-compliance)).
 - **Lost Mode** — mobile devices currently in Lost Mode.
+- **Webhooks created by Jamf Routines** — marked so they aren't mistaken for hand-made ones. Jamf Routines creates a webhook in Jamf Pro for each event-driven routine, in the same list as your own, with nothing in Jamf Pro to distinguish them.
 
 ### Clean up
 
-- **Cleanup** — surfaces orphaned packages and scripts, unscoped enabled policies, empty static groups, disabled policies, unused buildings, departments, categories, printers, and enrollment customizations, and other environment cruft, with exportable findings. An optional, off-by-default **Destructive Mode** can delete surfaced objects directly (see [Deleting objects](#deleting-objects-destructive-mode)).
+- **Cleanup** — surfaces orphaned packages and scripts, unscoped enabled policies, profiles, apps, App Catalog deployments and Restricted Software, empty static groups, disabled policies and disabled webhooks, unused buildings, departments, printers, and enrollment customizations, blueprints scoped to nothing, webhooks whose target smart group no longer exists, legacy Jamf Remote policies, unmanaged devices, and other environment cruft, with exportable findings. An optional, off-by-default **Destructive Mode** can delete surfaced objects directly (see [Deleting objects](#deleting-objects-destructive-mode)).
 
 ![The Cleanup tab — orphaned packages, unscoped policies, and empty static groups surfaced for review](docs/images/03-cleanup.png)
 
@@ -67,7 +70,7 @@ ScopeMap marks objects on the canvas and in the Inspector when something looks w
 
 ### Scans and snapshots
 
-A standard scan fetches the objects and relationships needed to draw the map. A **deep scan** goes further and pulls the detail records behind them — configuration profile payload contents, policy payloads, and the rest — which is what Search needs and what makes some risk warnings possible.
+A standard scan fetches the objects and relationships needed to draw the map. A **deep scan** goes further and pulls the detail records behind them — macOS and mobile configuration profile payload contents, script and package details, Mac app details, smart-group criteria, extension attribute definitions, Blueprint details, and each computer's installed-package receipts — which is what Search needs and what makes some risk warnings and Journey's cascade detection possible.
 
 Every scan is cached per server, so reopening a server loads the last snapshot instantly, with no API traffic, and works offline. The snapshot records when its data was actually fetched, not when it was last written, so a stale cache says so.
 
@@ -81,7 +84,7 @@ Download the latest notarized installer package from the [Releases](../../releas
 
 To build from source instead, clone the repository and open `ScopeMap.xcodeproj`. There is one scheme and one set of Debug/Release configurations.
 
-A short guided tour runs the first time you launch the app, and Help → Help opens an in-app reference covering how scanning works, credentials, and privacy.
+A short guided tour runs the first time you launch the app, and Help → ScopeMap Help (⌘?) opens an in-app reference covering how scanning works, credentials, and privacy.
 
 ## Requirements
 
@@ -102,12 +105,14 @@ By default ScopeMap is a **read-only reporting tool** — it never creates, modi
 
 Privilege names differ depending on how you authenticate, so both lists are below. If a privilege is missing, ScopeMap doesn't fail — that object type is simply absent from the map — so you can trim either list for a narrower use case.
 
+You won't have to guess which one is missing. After a scan, ScopeMap reports every object type it was refused: a banner above the map names the count, and its details sheet lists each object type, what the gap costs you on the map, and the exact privilege to grant, named the way *your* auth mode names it. The same verdict is written to the activity log. It's advisory only — a narrow role producing a narrow map is a supported way to use ScopeMap, and nothing is blocked.
+
 ### If you use an API client (client ID/secret)
 
 Create a dedicated API role with these **Read** privileges:
 
 <details>
-<summary>37 read privileges</summary>
+<summary>39 read privileges</summary>
 
 **Devices** — Read Computers · Read Mobile Devices
 
@@ -127,7 +132,7 @@ Create a dedicated API role with these **Read** privileges:
 
 **Accounts** — Read Accounts · Read Account Groups · Read User
 
-**Settings** — Read Computer Check-In · Read Inventory Preload Records
+**Settings** — Read Computer Check-In · Read Inventory Preload Records · Read Webhooks
 
 </details>
 
@@ -172,6 +177,8 @@ Scope evaluation is the core of the app, so it's worth being precise about where
 
 **Inferred, not confirmed** — cascades in Journey, where a package installed by one policy makes a device eligible for a smart group that delivers more software. ScopeMap can show that a cascade is possible from criteria and package names; it can't always confirm one occurred, and labels its confidence accordingly.
 
+**Not reported by Jamf at all** — webhook delivery history. No Jamf API exposes whether a webhook has ever fired, is currently failing, or what it last returned, so ScopeMap can only report a webhook's configuration. "Disabled" and "target group no longer exists" are the two problems detectable without delivery data, and both are surfaced in Cleanup.
+
 **Not yet covered as object types** — eBooks and Classes.
 
 ## Deleting objects (Destructive Mode)
@@ -185,12 +192,16 @@ Destructive Mode is built to be hard to trigger by accident:
 - Deleting is a two-step action: select items in Cleanup, then confirm in a dialog that lists exactly what will be removed.
 - Every deletion is **permanent, cannot be undone, and is recorded in the activity log**.
 
-Deletion is supported for scripts, packages, policies, macOS and mobile configuration profiles, restricted software, static computer and mobile groups, buildings, departments, printers, and Mac and mobile apps. **Computers and mobile devices are never deletable** — removing their records carries MDM consequences — and App Catalog deployments must be removed in Jamf Pro directly.
+Deletion is supported for scripts, packages, policies, macOS and mobile configuration profiles, restricted software, static computer and mobile groups, buildings, departments, printers, Mac and mobile apps, webhooks, enrollment customizations, and blueprints. **Computers and mobile devices are never deletable** — removing their records carries MDM consequences — and App Catalog deployments must be removed in Jamf Pro directly.
+
+Blueprints are the one type deleted through the Jamf Platform API rather than the Jamf Pro API, so blueprint deletes require Platform API credentials to be configured for the server; without them the delete is blocked with a message in the activity log.
+
+**Webhooks created by Jamf Routines are protected from deletion**, even with Destructive Mode on. Deleting one would silently break the routine that owns it, with nothing in Jamf Pro to explain why — so those rows are report-only and say so. Webhooks you created yourself delete normally.
 
 Destructive Mode needs **Delete** privileges on the object types you intend to remove, in addition to the Read privileges above. The Auditor role includes none of them. If your account has only Read access, deletes fail with a permissions error and nothing is changed.
 
 <details>
-<summary>13 delete privileges</summary>
+<summary>15 delete privileges</summary>
 
 | Object | API role | User account |
 | --- | --- | --- |
@@ -207,6 +218,8 @@ Destructive Mode needs **Delete** privileges on the object types you intend to r
 | Printers | Delete Printers | Delete - Printers |
 | Mac apps | Delete Mac Applications | Delete - Mac App Store Apps |
 | Mobile device apps | Delete Mobile Device Applications | Delete - Mobile Device Apps |
+| Webhooks | Delete Webhooks | Delete - Webhooks |
+| Enrollment customizations | Delete Enrollment Customizations | Delete - Enrollment Customizations |
 
 </details>
 
@@ -215,7 +228,8 @@ Grant only the object types you actually intend to clean up. Note that the **sma
 ## Privacy and security
 
 - Server credentials are stored only in the **local macOS Keychain**, never on disk in plain text.
-- Cached server snapshots are stored locally in the app's sandboxed container.
+- Cached server snapshots are stored locally in the app's sandboxed container, as **unencrypted JSON** — one file per server, holding the Jamf object data from that server's last scan. Treat them as you would any other local copy of your Jamf inventory.
+- **Removing a saved server removes everything belonging to it**: its Keychain credentials, its cached snapshot, its imported Summary, its Device Compliance selections, and any flags and notes you saved for it. Nothing is removed from Jamf Pro itself.
 - The app is sandboxed with outgoing-network and user-selected-file entitlements only.
 - **Minimal, anonymous usage analytics.** ScopeMap sends a single anonymous "launched" signal to [TelemetryDeck](https://telemetrydeck.com) at startup, so the Concepts team can see adoption. No device, server, credentials, or Jamf object data is ever included. Opt out anytime in Preferences → General → Privacy (takes effect on next launch).
 - **Version check.** At launch ScopeMap fetches a small JSON file from a public GitHub repository listing versions that shouldn't be run — how we stop a build with a serious defect from staying in circulation. The request is an anonymous `GET`; it sends no identifying information and no data about you, your Mac, or your server. If the request fails, the app starts normally.
@@ -228,18 +242,22 @@ For Jamf's corporate privacy practices, see the [Jamf Privacy Policy](https://ww
 
 ## Logs
 
-ScopeMap doesn't write a log file to disk. Every API call, its timing, and any error is recorded in the in-app **Activity log** (toolbar icon, badged when something fails during a scan) for the current session — it isn't persisted between launches. There is no separate debug/verbose mode to enable; the Activity log already shows full request timing and error detail.
+ScopeMap doesn't write a log file to disk on its own. Every API call, its timing, and any error is recorded in the in-app **Activity log** (toolbar icon, badged when something fails during a scan) for the current session — it isn't persisted between launches. There is no separate debug/verbose mode to enable; the Activity log already shows full request timing and error detail.
+
+The log window's **Export** menu saves or copies the whole session log, which is more than the bug reporter sends — that one carries only the last 300 entries. Two variants: **Full**, which includes your Jamf Pro URL and account name and is meant for your own diagnosis, and **Redacted**, which applies the same substitutions a bug report does — server URL, hostname, server name and API account — for pasting into a ticket.
+
+If ScopeMap quits unexpectedly, the next launch says so and offers to open a bug report pre-filled with the version, timing and last major operation of the session that died. Nothing is sent automatically — as with any bug report, you read it and press Send. If it was a genuine crash, macOS also wrote a symbolicated report to `~/Library/Logs/DiagnosticReports`; attaching that makes it far more diagnosable. A Force Quit or a Mac restart looks identical from inside the app, so the prompt is safe to ignore in those cases.
 
 ## Troubleshooting
 
 - **"Certificate not trusted" or TLS errors connecting to a Jamf Pro server** — this usually means the server uses a self-signed or internally-issued certificate that isn't in your Mac's trust store. Add the certificate to your login or System keychain and mark it trusted, then reconnect.
-- **403 / permission errors during a scan** — the API account or role you're using is missing a Read privilege for one of the object types listed in [Jamf Pro API privileges](#jamf-pro-api-privileges). Check the Activity log for the specific endpoint that failed and add the corresponding privilege.
+- **An object type is missing from the map** — the account is almost certainly missing its Read privilege. Look for the banner above the map after a scan and open its details sheet, which names the object type and the privilege to grant. Note that a Jamf Pro user account is often refused with a **401** where an API role is refused with a **403** — both mean the same thing here.
 - **Search finds nothing in profile payloads** — payload contents are only fetched during a deep scan. Run one, then search again.
 - **The Compliance tab or Blueprints are empty** — both require Jamf Platform API credentials for the connected server. Everything else works without them.
 - **Destructive Mode delete fails with a permissions error** — your account has Read access but not the Delete privilege for that object type. See [Deleting objects](#deleting-objects-destructive-mode).
 - **A scan hangs or never completes** — open the Activity log (toolbar) to see which API call is in progress and whether it's retrying. Very large environments can take longer on the first scan; subsequent scans use the cached snapshot.
 - **The data looks out of date** — check the snapshot timestamp. Cached snapshots are shown as-is until you rescan.
-- **Still stuck** — use Help → Report a Bug so the report includes your app/macOS version, object counts, and the tail of the activity log.
+- **Still stuck** — use Help → Report a Bug so the report includes your app/macOS version, object counts, and the tail of the activity log. If the problem happened early in a long scan, export the full log from the log window's Export menu and attach that too — the bug report only carries the last 300 entries.
 
 ## Reporting a bug
 
@@ -249,7 +267,7 @@ Your **server URL, hostname, server name, and API account are redacted** from th
 
 ## Getting help
 
-- **In the app** — Help → Help covers how scanning works, what credentials are needed, and what the app does and doesn't send anywhere.
+- **In the app** — Help → ScopeMap Help (⌘?) covers how scanning works, what credentials are needed, and what the app does and doesn't send anywhere.
 - **Something wrong?** — [Report a bug](#reporting-a-bug).
 - **A security issue?** — [SECURITY.md](SECURITY.md), not a public issue.
 - **Want to contribute?** — [CONTRIBUTING.md](CONTRIBUTING.md).
