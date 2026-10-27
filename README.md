@@ -8,7 +8,7 @@ ScopeMap is a native macOS app that answers the question Jamf Pro's web interfac
 - [Installing](#installing)
 - [Requirements](#requirements)
 - [Connecting to a server](#connecting-to-a-server)
-- [Jamf Pro API privileges](#jamf-pro-api-privileges)
+- [API privileges](#api-privileges)
 - [What ScopeMap can and can't evaluate](#what-scopemap-can-and-cant-evaluate)
 - [Deleting objects (Destructive Mode)](#deleting-objects-destructive-mode)
 - [Privacy and security](#privacy-and-security)
@@ -20,23 +20,24 @@ ScopeMap is a native macOS app that answers the question Jamf Pro's web interfac
 
 ## Features
 
-Seven tabs, in the order they usually get used. Tab order is customizable in Preferences.
+Eight tabs, in the order they usually get used. Tab order is customizable in Preferences.
 
 ### Visualize
 
-- **Map** — an interactive graph with separate Computers and Devices views, covering smart and static groups, policies, configuration profiles, Mac and mobile apps, App Catalog deployments, Restricted Software, Patch Titles, packages, scripts, printers, PreStage enrollments, Enrollment Customizations, extension attributes, Blueprints *(beta)*, webhooks, Jamf users and user groups, and your buildings, departments, and categories.
+- **Map** — an interactive graph with separate Computers and Devices views, covering smart and static groups, policies, configuration profiles, Mac and mobile apps, App Catalog deployments, Restricted Software, Patch Titles, packages, scripts, printers, PreStage enrollments, Enrollment Customizations, extension attributes, Blueprints, webhooks, Jamf users and user groups, and your buildings, departments, and categories.
 - **Journey** — the full path a device takes from enrollment (PreStage) through group membership to every policy, profile, app, package, and script it would receive — including cascades, where installed software triggers smart-group membership that delivers more software.
 - **Compare** — opens in its own window for side-by-side comparison of two computers, mobile devices, policies, macOS or mobile configuration profiles, or Blueprints, including effective-scope evaluation ("applies / does not apply / unknown").
-- **Inspector** — select any object to see its scope, its relationships in both directions, and a direct link to open it in Jamf Pro. Blueprints additionally report per-device deployment status: Jamf's own succeeded / failed / pending counts, each expandable to the named devices behind it.
+- **Inspector** — select any object to see its scope, its relationships in both directions, and a direct link to open it in Jamf Pro. Blueprints list their components grouped as **Native DDM** and **Legacy payloads**, each collapsed until opened and shown with readable settings, and report per-device deployment status: Jamf's own succeeded / failed / pending counts, each expandable to the named devices behind it. Configuration profiles that use settings Apple has replaced with a declaration get a collapsible **DDM available** section, with links to Apple's deprecated and removed key lists, and a blue dot on the Map when a native component for it exists in Jamf Blueprints.
 
 ![The Journey tab — the path a device takes from PreStage enrollment through group membership to everything it receives](docs/images/02-journey.png)
 
 ### Investigate
 
-- **Search** — full-text search across configuration profile payload settings, so you can find which profile actually sets a given key. Requires a deep scan (see [Scans and snapshots](#scans-and-snapshots)) for complete results, since payload contents are only fetched then.
+- **Search** — full-text search across configuration profile payload settings, so you can find which profile actually sets a given key. It also searches Blueprint components and their individual settings. Requires a deep scan (see [Scans and snapshots](#scans-and-snapshots)) for complete results, since payload contents are only fetched then.
 - **Summary** — import a Jamf Pro Summary file (text or JSON) to review licensing, database health, server configuration, and account hygiene.
-- **Compliance** — Jamf Compliance Benchmark results pulled from the Jamf Platform API, with per-benchmark pass rates and drill-down to individual rules. Read-only.
-- **Filters** — narrow the map by name, object type, site, staleness, scope status, managed state, group emptiness, policy enabled state, Blueprint deployment state, Lost Mode, device compliance, user assignment, Inventory Preload, and saved advanced searches. Benchmark-generated objects and legacy Jamf Remote policies can be hidden outright.
+- **Protect** — appears when a Jamf Protect integration is found for the server (opt-in in the server editor). Shows which Jamf Protect analytics write an identifier into a Jamf Pro smart group, so you can see what depends on them. See [Jamf Protect](#if-you-use-the-platform-api-recommended) for setup.
+- **Compliance** *(beta)* — Jamf Compliance Benchmark results pulled from the Jamf Platform API, with per-benchmark pass rates and drill-down to individual rules. Read-only. Marked beta because the tab is the newest and least exercised, so verify results against Jamf Pro before acting on them.
+- **Filters** — narrow the map by name, object type, site, staleness, scope status, managed state, group emptiness, policy enabled state, Blueprint deployment state, whether a configuration profile has a Blueprint component available, Lost Mode, device compliance, user assignment, Inventory Preload, and saved advanced searches. Benchmark-generated objects and legacy Jamf Remote policies can be hidden outright.
 - **Flags and notes** — flag any object and attach a note as you work. A toolbar badge counts flagged items, a dedicated view lists them, and the flagged set can be included in an export.
 
 ### Catch what's easy to miss
@@ -89,23 +90,117 @@ A short guided tour runs the first time you launch the app, and Help → ScopeMa
 ## Requirements
 
 - **macOS 14.0 or later** (Apple silicon or Intel)
-- **Jamf Pro** with API access (Classic + Pro API)
-- **Jamf Platform API credentials** — only for Blueprints and the Compliance tab. Everything else works without them.
+- **A Jamf Platform API integration, scoped to your platform environment** — the recommended way to connect, and the only one that covers everything (Jamf Pro, Classic, Blueprints, Compliance and Jamf Protect) with a single credential. Requires Jamf Cloud. See the [quick start](#quick-start-platform-api-recommended).
+- **Or, if you're self-hosted**, a Jamf Pro user account or API client with API access (Classic + Pro API). Platform credentials are then optional and unlock only Blueprints and the Compliance tab, and Jamf Protect uses its own API client.
 - **Xcode 26 or later** — only to build from source
 
 ## Connecting to a server
 
 ScopeMap manages a list of saved Jamf Pro servers, so you can keep sandbox, staging, and production side by side and switch between them without re-entering anything. Each server keeps its own cached snapshot, its own Device Compliance group selections, and its own credentials in the Keychain.
 
-Both auth modes are supported: a Jamf Pro user account (username/password) or an API client (client ID/secret).
+Three auth modes are supported:
 
-## Jamf Pro API privileges
+| Mode | What you provide | Notes |
+| --- | --- | --- |
+| **Platform API** | One Jamf Platform integration (client ID/secret) + an Environment ID | Recommended. Covers every API ScopeMap reads with a single credential. Jamf Cloud only. |
+| **User/Password** | A Jamf Pro user account | Works on self-hosted. Platform credentials can be added separately for Blueprints and Compliance. |
+| **API Client** | A Jamf Pro API client ID/secret | Works on self-hosted. Platform credentials can be added separately for Blueprints and Compliance. |
+
+Platform API is the default for new servers because it is where Jamf is consolidating API access, and because it removes the split where Blueprints and Compliance needed a second set of credentials. The other two modes are fully supported and are not going anywhere for now — on a self-hosted Jamf Pro they're the only option, since the Platform API gateway is Jamf-hosted.
+
+### Quick start: Platform API (recommended)
+
+1. **Check your platform environment** in Jamf Account. It must contain your Jamf Pro tenant, and your Jamf Protect tenant too if you want the Protect tab. Group them first if they aren't.
+2. **Create an integration scoped to that environment**, not to a single tenant. Blueprints and Compliance only exist at environment scope, so a tenant-scoped integration silently misses them. **Scope and permissions can't be edited after creation**, so decide both now.
+3. **Grant the read capabilities** listed under [API privileges](#if-you-use-the-platform-api-recommended). The list already includes the Protect ones (`detection-analytics:read` and `jamf-protect-deployments:read`), so if you want Protect, tick them now. They can't be added later.
+4. In ScopeMap, add a server, choose **Platform API**, and enter the **client ID**, **client secret** and **Environment ID**. No tenant ID is needed.
+5. If you have Jamf Protect, switch **Jamf Protect** on in the server editor. It needs no separate credential in this mode.
+
+Full details, the complete capability list and the reasons behind each step are in [API privileges](#if-you-use-the-platform-api-recommended).
+
+## API privileges
 
 By default ScopeMap is a **read-only reporting tool** — it never creates, modifies, or deletes anything on your server. Every request it makes is a `GET`.
 
-Privilege names differ depending on how you authenticate, so both lists are below. If a privilege is missing, ScopeMap doesn't fail — that object type is simply absent from the map — so you can trim either list for a narrower use case.
+Privilege names differ depending on how you authenticate, so each mode has its own list below. If a privilege is missing, ScopeMap doesn't fail — that object type is simply absent from the map — so you can trim any of these lists for a narrower use case.
 
 You won't have to guess which one is missing. After a scan, ScopeMap reports every object type it was refused: a banner above the map names the count, and its details sheet lists each object type, what the gap costs you on the map, and the exact privilege to grant, named the way *your* auth mode names it. The same verdict is written to the activity log. It's advisory only — a narrow role producing a narrow map is a supported way to use ScopeMap, and nothing is blocked.
+
+### If you use the Platform API (recommended)
+
+Jamf's Platform API gateway proxies the Jamf Pro and Classic APIs rather than replacing them, so one integration reaches everything: Jamf Pro, Classic, Blueprints, Compliance Benchmarks, and platform device inventory. There is no Jamf Pro account, API role, or API client involved — API roles and clients are managed in Jamf Account now, and the gateway accepts client credentials only.
+
+**Setting it up**
+
+**The order matters.** An integration's scope and permissions **cannot be edited after it's created** — if you get either wrong, you make a new integration. So set the environment up first and grant generously.
+
+1. **Check your platform environment first**, in Jamf Account. It must contain your Jamf Pro tenant, and — if you want the Protect features — your Jamf Protect tenant as well. Jamf groups most organizations' tenants automatically; if yours aren't grouped the way you need, group them in the platform environments UI before going any further. A tenant that isn't in the environment when you create the integration can't be reached by it.
+2. In **Jamf Account → Integrations**, create an integration. You need the Administrator role, or a custom role with Integrations privileges.
+3. Scope it to that **platform environment**. This matters: Blueprints and Compliance Benchmarks are published at environment scope *only*, and a tenant-scoped credential cannot reach them at all. An environment-scoped credential still reaches Jamf Pro, Classic and Protect, which is why one integration is enough.
+4. Grant the capabilities listed below. Because you can't come back and add one, grant anything you might plausibly need — these are all read-only, and ScopeMap's privilege report will tell you afterward which ones it never used.
+5. Copy the **client ID**, **client secret**, and the **Environment ID** into ScopeMap's server editor. You do not need a tenant ID.
+
+A manually created environment only becomes selectable once Jamf can determine its region, which requires the environment to contain an MDM solution and all of its tenants (except Jamf Security Cloud) to be in the same region. Allow up to 15 minutes for a new or edited environment to appear.
+
+**Capabilities to grant**
+
+Platform permissions are `{capability}:{action}` strings and are grouped by capability rather than by product, so one capability often covers what used to be several Jamf Pro privileges. ScopeMap needs **read** on these — this set has been confirmed against a live environment-scoped integration, where a full scan completed with no refused reads:
+
+<details>
+<summary>34 read capabilities</summary>
+
+**Devices and groups** — `devices:read` · `device-groups:read` · `extension-attributes:read` · `advanced-device-searches:read`
+
+**Deliverables** — `policies:read` · `configuration-profiles:read` · `applications:read` · `restricted-software:read` · `packages:read` · `scripts:read` · `printers:read`
+
+**Patch** — `patch-policies:read` · `patch-management-software-titles:read`
+
+**Enrollment** — `prestage-enrollments:read` · `enrollment-customization:read` · `device-enrollment-program-instances:read`
+
+**Organization** — `buildings:read` · `departments:read` · `categories:read` · `self-service:read` · `sites:read` · `distribution-points:read`
+
+**Users** — `users:read` · `user-groups:read` · `accounts:read` · `volume-purchasing-locations:read`<sup>†</sup>
+
+**Jamf Protect** — `jamf-protect-deployments:read`<sup>†</sup> · `detection-analytics:read`
+
+**Settings** — `computer-check-in:read` · `inventory-preload-records:read` · `webhooks:read`
+
+**Jamf Platform** — `blueprints:read` · `compliance-benchmarks:read` · `declarations:read`
+
+</details>
+
+The picker in Jamf Account searches **human-readable labels, not capability strings**, so searching for `accounts:read` or `computer-check-in:read` finds nothing — look for "Admin account" and "Computer check-in" instead, and expect them under the category headings rather than alphabetically.
+
+Four things in that list are easy to get wrong:
+
+- **Capabilities collapse computer and mobile into one string.** `devices:read` covers both computers and mobile devices, `device-groups:read` covers both smart and static for both platforms, and the same merge applies to extension attributes, configuration profiles, advanced searches, prestages, and apps. You can't hold half of one.
+- **`self-service:read` is required alongside `categories:read`**, because Jamf gates the categories endpoint on both. ScopeMap doesn't read Self Service itself.
+- **Patch needs both** `patch-policies:read` and `patch-management-software-titles:read`; either alone fails.
+- **Don't translate Jamf Pro privileges one-to-one.** An API role needs *both* Read Accounts and Read Account Groups to read Jamf Pro accounts, but the Platform equivalent is `accounts:read` alone — `account-groups:read` is a Jamf Account capability covering Jamf's own admin groups, and the Classic API doesn't accept it as a scope at all. Where the two models disagree, the capability named in the API's OpenAPI spec (`x-required-privileges`) is what the gateway enforces.
+- **`declarations:read` is what powers per-device Blueprint status**, via the declaration reporting API. Without it, Blueprints still appear but their per-device status doesn't resolve.
+
+<sup>†</sup> These are the capabilities ScopeMap needs but **cannot report on**, so grant them up front — nothing in the app will ever tell you they're missing.
+
+`volume-purchasing-locations:read` backs the VPP check behind the "Users With No Devices" cleanup category, which requires complete VPP evidence before offering a user as deletable. Without it the category fails closed and simply offers nothing.
+
+`jamf-protect-deployments:read` is how ScopeMap finds your Protect tenant URL. A refusal here is indistinguishable from "this server has no Protect integration" — the app treats both as unconfigured and the Protect features quietly stay empty. (This capability only grants the *discovery* read against Jamf Pro; Protect itself still needs its own credentials, as noted below.)
+
+**Jamf Protect**
+
+In this mode Jamf Protect needs **no separate credential**. It's a GraphQL API published on the gateway alongside the REST ones, so the same integration reaches it. Two requirements:
+
+1. **The platform environment must contain both tenants** — your Jamf Pro tenant *and* your Jamf Protect tenant. Group them in the platform environments UI in Jamf Account **before** creating the integration, because an integration's scope and permissions can't be edited afterward. If Protect isn't in the environment when you create the integration, you'll be making a new one.
+2. **Grant `detection-analytics:read`** (shown as Read on "Detection analytics" under Endpoint security). That's the only Protect capability ScopeMap needs — it reads which analytics write an identifier into a Jamf Pro smart group, and nothing else. You can leave Protection plans, Threat alerts, Security audit log, Unified logging filters, Prevent lists and Threat definition versions unticked.
+
+`jamf-protect-deployments:read` is separate and still needed: that's the Jamf Pro-side read that discovers whether the server has Protect at all, and it's what makes the Protect tab appear.
+
+Protect is still **opt-in**: switch **Jamf Protect** on in the server editor. There are no credential fields to fill in for it in this mode, but ScopeMap won't go looking for Protect unless you ask it to. With it on, the Protect tab stays hidden unless a Protect integration is actually found, so switching it on costs nothing if you don't have Protect.
+
+In the other two auth modes Protect still uses its own API client against your Protect tenant, configured in the server editor — see the setup guide linked there.
+
+**What the Platform API doesn't cover**
+
+App Catalog deployments are the same gap they are in the other modes — see the note at the end of the API client section below.
 
 ### If you use an API client (client ID/secret)
 
@@ -140,7 +235,7 @@ Two of those are easy to miss. **Read Self Service** is required alongside Read 
 
 App Catalog deployments are the one gap. The App Installers endpoint isn't covered by either of Jamf's published privilege tables and has no matching API role privilege, so if App Catalog deployments don't appear on your map, that endpoint is the thing to check.
 
-Blueprints and Compliance are Jamf Platform features and use separate Platform scopes rather than Jamf Pro privileges: `blueprints read` and `compliance-benchmarks read`.
+Blueprints and Compliance are Jamf Platform features and are not covered by any Jamf Pro privilege. In this mode they need a *second* credential — a Jamf Platform integration, added alongside the API client — granted `blueprints:read`, `compliance-benchmarks:read`, and `declarations:read` for per-device Blueprint status. Needing two credentials for one app is the reason Platform API mode exists; see [above](#if-you-use-the-platform-api-recommended).
 
 ### If you use a Jamf Pro user account (username/password)
 
@@ -192,7 +287,7 @@ Destructive Mode is built to be hard to trigger by accident:
 - Deleting is a two-step action: select items in Cleanup, then confirm in a dialog that lists exactly what will be removed.
 - Every deletion is **permanent, cannot be undone, and is recorded in the activity log**.
 
-Deletion is supported for scripts, packages, policies, macOS and mobile configuration profiles, restricted software, static computer and mobile groups, buildings, departments, printers, Mac and mobile apps, webhooks, enrollment customizations, and blueprints. **Computers and mobile devices are never deletable** — removing their records carries MDM consequences — and App Catalog deployments must be removed in Jamf Pro directly.
+Deletion is supported for scripts, packages, policies, macOS and mobile configuration profiles, restricted software, static computer and mobile groups, buildings, departments, categories, printers, Mac and mobile apps, webhooks, enrollment customizations, Jamf Pro users with no devices, and blueprints. **Computers and mobile devices are never deletable** — removing their records carries MDM consequences — and App Catalog deployments must be removed in Jamf Pro directly.
 
 Blueprints are the one type deleted through the Jamf Platform API rather than the Jamf Pro API, so blueprint deletes require Platform API credentials to be configured for the server; without them the delete is blocked with a message in the activity log.
 
@@ -201,7 +296,7 @@ Blueprints are the one type deleted through the Jamf Platform API rather than th
 Destructive Mode needs **Delete** privileges on the object types you intend to remove, in addition to the Read privileges above. The Auditor role includes none of them. If your account has only Read access, deletes fail with a permissions error and nothing is changed.
 
 <details>
-<summary>15 delete privileges</summary>
+<summary>17 delete privileges (API client and user account)</summary>
 
 | Object | API role | User account |
 | --- | --- | --- |
@@ -215,6 +310,8 @@ Destructive Mode needs **Delete** privileges on the object types you intend to r
 | Static mobile device groups | Delete Static Mobile Device Groups | Delete - Static Mobile Device Groups |
 | Buildings | Delete Buildings | Delete - Buildings |
 | Departments | Delete Departments | Delete - Departments |
+| Categories | Delete Categories | Delete - Categories |
+| Jamf Pro users (with no devices) | Delete User | Delete - Users |
 | Printers | Delete Printers | Delete - Printers |
 | Mac apps | Delete Mac Applications | Delete - Mac App Store Apps |
 | Mobile device apps | Delete Mobile Device Applications | Delete - Mobile Device Apps |
@@ -223,7 +320,34 @@ Destructive Mode needs **Delete** privileges on the object types you intend to r
 
 </details>
 
-Grant only the object types you actually intend to clean up. Note that the **smart** group delete privileges are never needed — only empty static groups are deletable — and neither are Delete Computers, Delete Mobile Devices, or Delete User.
+Grant only the object types you actually intend to clean up. Note that the **smart** group delete privileges are never needed — only empty static groups are deletable — and neither are Delete Computers or Delete Mobile Devices.
+
+**If you use the Platform API,** Destructive Mode needs the matching **Delete** action on the same capabilities, which you must tick when you create the integration, because its permissions can't be edited later. Granting Delete is optional: skip it and ScopeMap stays read-only, and any delete you attempt fails with a permissions error. Grant only the types you intend to clean up:
+
+<details>
+<summary>15 delete capabilities (Platform API)</summary>
+
+| Object | Capability |
+| --- | --- |
+| Scripts | `scripts:delete` |
+| Packages | `packages:delete` |
+| Policies | `policies:delete` |
+| macOS and mobile configuration profiles | `configuration-profiles:delete` |
+| Restricted software | `restricted-software:delete` |
+| Static computer and mobile groups | `device-groups:delete` |
+| Buildings | `buildings:delete` |
+| Departments | `departments:delete` |
+| Categories | `categories:delete` |
+| Printers | `printers:delete` |
+| Mac and mobile apps | `applications:delete` |
+| Webhooks | `webhooks:delete` |
+| Enrollment customizations | `enrollment-customization:delete` |
+| Jamf Pro users (with no devices) | `users:delete` |
+| Blueprints | `blueprints:delete` |
+
+</details>
+
+Platform capabilities are coarser than the Jamf Pro privileges above: `configuration-profiles:delete` covers macOS and mobile profiles together, `device-groups:delete` covers smart as well as static groups for both platforms (ScopeMap only ever deletes empty static groups), and `applications:delete` covers Mac and mobile apps. You can't grant half of one. Don't tick **Deploy** on Blueprints; ScopeMap deletes them but never deploys.
 
 ## Privacy and security
 
@@ -251,9 +375,10 @@ If ScopeMap quits unexpectedly, the next launch says so and offers to open a bug
 ## Troubleshooting
 
 - **"Certificate not trusted" or TLS errors connecting to a Jamf Pro server** — this usually means the server uses a self-signed or internally-issued certificate that isn't in your Mac's trust store. Add the certificate to your login or System keychain and mark it trusted, then reconnect.
-- **An object type is missing from the map** — the account is almost certainly missing its Read privilege. Look for the banner above the map after a scan and open its details sheet, which names the object type and the privilege to grant. Note that a Jamf Pro user account is often refused with a **401** where an API role is refused with a **403** — both mean the same thing here.
+- **An object type is missing from the map** — the credential is almost certainly missing its read privilege. Look for the banner above the map after a scan and open its details sheet, which names the object type and the privilege or capability to grant, in the vocabulary your own auth mode uses. Note that a Jamf Pro user account is often refused with a **401** where an API role is refused with a **403** — both mean the same thing here.
+- **Platform API mode: everything is refused with 403, and granting more capabilities doesn't help** — a `403` from the gateway doesn't necessarily mean a missing permission. Work through the causes in this order: (1) the capability genuinely isn't granted; (2) the integration is scoped to a tenant rather than a platform environment, or the Environment ID is wrong — a scope header that doesn't match the credential's scope is a `403`; (3) the path's version segment is unrecognized, which the gateway also answers with `403` rather than `404`, deliberately, so it doesn't confirm which paths exist. If a capability is definitely granted and the scope is definitely right, suspect the route rather than the permission.
 - **Search finds nothing in profile payloads** — payload contents are only fetched during a deep scan. Run one, then search again.
-- **The Compliance tab or Blueprints are empty** — both require Jamf Platform API credentials for the connected server. Everything else works without them.
+- **The Compliance tab or Blueprints are empty** — in User/Password or API Client mode, both require Jamf Platform API credentials to be added for that server; everything else works without them. In Platform API mode the credential is already there, so the cause is different: these two APIs are published at platform-environment scope *only*, so check that the integration was created at environment scope and that the Environment ID on the server entry is correct. A tenant-scoped integration reaches Jamf Pro and Classic fine and fails on exactly these two.
 - **Destructive Mode delete fails with a permissions error** — your account has Read access but not the Delete privilege for that object type. See [Deleting objects](#deleting-objects-destructive-mode).
 - **A scan hangs or never completes** — open the Activity log (toolbar) to see which API call is in progress and whether it's retrying. Very large environments can take longer on the first scan; subsequent scans use the cached snapshot.
 - **The data looks out of date** — check the snapshot timestamp. Cached snapshots are shown as-is until you rescan.
